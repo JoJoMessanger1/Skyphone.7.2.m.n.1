@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skyphone - VoIP</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style>
+        :root {
+            /* Definieren der neuen, vom Bild inspirierten Farbpalette */
+            --bg: #101524;               /* Sehr dunkles Blau für den Hintergrund */
+            --card-bg: #161c2e;          /* Etwas helleres Dunkelblau für Karten */
+            --sky-blue: #4a90e2;          /* Das helle Blau des "SkyChat"-Logos */
+            --btn-active: #3367d6;       /* Kräftigeres Blau für Buttons und Aktionen */
+            --input-bg: rgba(255, 255, 255, 0.05); /* Dezenter, transparenter Input-Hintergrund */
+            --text-main: #ffffff;        /* Primärer Text in Weiß */
+            --text-subtle: #8a94a6;       /* Subtiler Text für Placeholder, etc. */
+            --green-active: #4caf50;      /* Grün für Anrufe/Annehmen */
+            --red-hangup: #ff4d4d;        /* Rot für Auflegen/Ablehnen */
+        }
+
+        body {
+            font-family: 'SF Pro Display', system-ui, sans-serif; /* Modernere Schriftart, ähnlich Apple */
+            background: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            user-select: none; /* Verhindert Textauswahl, wirkt nativer */
+        }
+
+        /* Haupt-Container/Karte - Neu gestaltet basierend auf der Vorlage */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid rgba(255,255,255,0.08); /* Sehr feiner Rand */
+            padding: 40px;
+            border-radius: 36px; /* Stärker abgerundete Ecken wie im Bild */
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.25); /* Weicher Schatten */
+        }
+
+        /* Styling der Eingabefelder - Neu gestaltet basierend auf der Vorlage */
+        input {
+            width: 100%;
+            padding: 18px; /* Mehr Padding für ein moderneres Gefühl */
+            margin: 12px 0;
+            border-radius: 16px; /* Abgerundete Ecken */
+            border: none;
+            background: var(--input-bg);
+            color: var(--text-main);
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        input::placeholder {
+            color: var(--text-subtle);
+        }
+
+        /* Basis-Styling für Buttons */
+        button {
+            cursor: pointer;
+            border: none;
+            transition: all 0.1s;
+            font-weight: 600;
+            outline: none;
+        }
+
+        button:active {
+            transform: scale(0.98); /* Kleiner Klick-Effekt */
+        }
+
+        /* Styling des primären "Google Login"-Buttons */
+        .btn-google {
+            width: 100%;
+            padding: 16px;
+            background: var(--text-main);
+            color: #000;
+            border-radius: 16px;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+
+        /* Styling des "GitHub Login"-Buttons */
+        .btn-github {
+            width: 100%;
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            border-radius: 16px;
+            margin-bottom: 24px;
+            font-size: 16px;
+        }
+
+        /* Styling des primären blauen Action-Buttons ("Login / Start") */
+        .btn-action {
+            width: 100%;
+            padding: 16px;
+            background: var(--btn-active);
+            color: var(--text-main);
+            border-radius: 16px;
+            margin-top: 16px;
+            font-size: 18px;
+        }
+
+        /* Basis-Styling für kreisrunde Anruf-Buttons (Grün/Rot) */
+        .circle-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            font-size: 22px;
+            color: white;
+        }
+
+        .btn-call { background: var(--green-active); }
+        .btn-hangup-large { background: var(--red-hangup); width: 72px; height: 72px; font-size: 32px; margin-top: 50px;}
+        .btn-reject { background: var(--red-hangup); }
+
+        /* Styling der Einträge in der Anrufliste */
+        .call-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.04);
+            padding: 16px 20px;
+            border-radius: 18px;
+            margin: 14px 0;
+        }
+
+        .call-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Textüberschriften im Sky-Blau */
+        .sky-title { color: var(--sky-blue); font-size: 36px; margin-bottom: 8px; font-weight: 700;}
+
+        /* Kleiner, subtiler Text wie "oder E-Mail" */
+        .text-sub { font-size: 13px; color: var(--text-subtle); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;}
+
+        /* Hilfsklasse zum Ausblenden von Elementen */
+        .hidden { display: none !important; }
+        
+        /* Unsichtbare Audio-Elemente */
+        #remoteAudio, #localAudio { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="loginScreen" class="card">
+        <div class="sky-title">SkyChat</div>
+        <p style="opacity: 0.6; margin-bottom: 30px;">Anmelden oder Registrieren</p>
+        
+        <button class="btn-google" onclick="googleLogin()">Google Login</button>
+        <button class="btn-github" onclick="githubLogin()">GitHub Login</button>
+        
+        <div class="text-sub">oder E-Mail</div>
+        
+        <input type="email" id="email" placeholder="E-Mail">
+        <input type="password" id="password" placeholder="Passwort">
+        
+        <button class="btn-action" onclick="handleAuth('login')">Login / Start</button>
+        <button class="btn-action" onclick="handleAuth('register')" style="background: transparent; color: var(--btn-active); border: 1.5px solid var(--btn-active);">Registrieren</button>
+    </div>
+
+    <div id="mainScreen" class="card hidden">
+        <div class="sky-title" style="font-size: 28px;">SkyChat</div>
+        <p id="myEmail" style="font-size: 0.85rem; color: var(--text-subtle); margin-bottom: 30px;"></p>
+        
+        <div style="text-align: left;">
+            <p style="font-weight: 600; font-size: 17px; margin-bottom: 12px; color: var(--text-main);">Aktuelle Anrufe</p>
+            <div id="incomingCallsList">
+                <p style="font-size: 0.9rem; opacity: 0.4;">Keine aktiven Anrufe...</p>
+            </div>
+        </div>
+
+        <div style="margin-top: 40px;">
+            <p style="font-weight: 600; font-size: 17px; margin-bottom: 12px; text-align: left; color: var(--text-main);">Jemanden anrufen</p>
+            <div style="display: flex; gap: 12px; align-items: center;">
+                <input type="email" id="targetEmail" placeholder="partner@email.de" style="margin:0; padding: 16px;">
+                <button class="circle-btn btn-call" style="width: 50px; height: 50px;" onclick="startCall()">📞</button>
+            </div>
+        </div>
+        
+        <button onclick="auth.signOut()" style="background:none; color:var(--text-subtle); margin-top:40px; border:none; font-weight: 500;">Abmelden</button>
+    </div>
+
+    <div id="callScreen" class="card hidden" style="background: var(--bg); border: none;">
+        <p id="callStatusText" style="font-size: 18px; color: var(--sky-blue);">Verbinde...</p>
+        <div id="remoteName" style="font-size: 24px; margin: 15px 0 60px 0; color: var(--text-main); font-weight: 600;">email@test.de</div>
+        
+        <div style="height: 120px; width: 120px; background: rgba(255,255,255,0.06); border-radius: 50%; margin: 0 auto; display: flex; align-items: center; justify-content: center; color: var(--text-main); font-size: 50px; border: 2px solid var(--sky-blue);">👤</div>
+        
+        <button class="circle-btn btn-hangup-large" onclick="endCall()">📞</button>
+        
+        <audio id="remoteAudio" autoplay></audio>
+        <audio id="localAudio" autoplay muted></audio>
+    </div>
+
+    <script>
+        // FIREBASE CONFIG - HIER DEINE DATEN EINTRAGEN
+        const firebaseConfig = {
+            apiKey: "AIzaSyAtneA9ProDr9h4eg9gUt4dYKRD8WZHTmg", authDomain: "skyphone-by-jojomessanger.firebaseapp.com", projectId: "skyphone-by-jojomessanger", storageBucket: "skyphone-by-jojomessanger.firebasestorage.app", messagingSenderId: "1087480218588", appId: "1:1087480218588:web:fed31f00e2f35f15040519" };
+
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
+        let localStream = null;
+        let peerConnection = null;
+        let currentCallId = null;
+
+        const servers = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }] };
+
+        // --- AUTH ---
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                document.getElementById('myEmail').innerText = user.email;
+                showScreen('mainScreen');
+                // Nutzer in DB registrieren, damit er gefunden werden kann
+                db.collection('users').doc(user.email).set({ status: 'online' }, { merge: true });
+                listenForIncomingCalls(user.email);
+            } else {
+                showScreen('loginScreen');
+            }
+        });
+
+        async function handleAuth(type) {
+            const e = document.getElementById('email').value;
+            const p = document.getElementById('password').value;
+            if(!e || !p) return alert("Bitte Daten eingeben");
+            try {
+                if(type === 'login') await auth.signInWithEmailAndPassword(e, p);
+                else await auth.createUserWithEmailAndPassword(e, p);
+            } catch(err) { alert(err.message); }
+        }
+
+        async function googleLogin() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try { await auth.signInWithPopup(provider); } catch(err) { alert(err.message); }
+        }
+
+        async function githubLogin() {
+            const provider = new firebase.auth.GithubAuthProvider();
+            try { await auth.signInWithPopup(provider); } catch(err) { alert(err.message); }
+        }
+
+        // --- CALL LOGIC ---
+        async function startCall() {
+            const target = document.getElementById('targetEmail').value;
+            if (!target || target === auth.currentUser.email) return alert("Ungültige Email");
+
+            // Prüfen ob Nutzer existiert
+            const userDoc = await db.collection('users').doc(target).get();
+            if (!userDoc.exists) return alert("Dieser Nutzer nutzt SkyChat nicht.");
+
+            try {
+                // Mikrofon Zugriff
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                document.getElementById('localAudio').srcObject = localStream;
+                
+                showScreen('callScreen');
+                document.getElementById('remoteName').innerText = target;
+
+                // RTC Setup
+                peerConnection = new RTCPeerConnection(servers);
+                localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+
+                const callDoc = db.collection('calls').doc();
+                currentCallId = callDoc.id;
+
+                peerConnection.onicecandidate = e => e.candidate && callDoc.collection('callerCandidates').add(e.candidate.toJSON());
+
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+
+                await callDoc.set({ 
+                    offer: { type: offer.type, sdp: offer.sdp },
+                    from: auth.currentUser.email,
+                    to: target,
+                    status: 'ringing'
+                });
+
+                // Listener für Antwort
+                callDoc.onSnapshot(snap => {
+                    const data = snap.data();
+                    if (!peerConnection.currentRemoteDescription && data?.answer) {
+                        peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                        document.getElementById('callStatusText').innerText = "Im Gespräch";
+                    }
+                    if (data?.status === 'ended') stopAll();
+                });
+
+                peerConnection.ontrack = e => document.getElementById('remoteAudio').srcObject = e.streams[0];
+
+                callDoc.collection('calleeCandidates').onSnapshot(snap => {
+                    snap.docChanges().forEach(change => {
+                        if (change.type === 'added') peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+                    });
+                });
+
+            } catch (err) {
+                alert("Fehler beim Anruf: " + err.message);
+                showScreen('mainScreen');
+            }
+        }
+
+        function listenForIncomingCalls(myEmail) {
+            db.collection('calls').where('to', '==', myEmail).where('status', '==', 'ringing')
+                .onSnapshot(snap => {
+                    const list = document.getElementById('incomingCallsList');
+                    list.innerHTML = snap.empty ? '<p style="font-size:0.9rem; opacity:0.4;">Keine aktiven Anrufe...</p>' : '';
+                    snap.forEach(doc => {
+                        const data = doc.data();
+                        const div = document.createElement('div');
+                        div.className = 'call-item';
+                        div.innerHTML = `
+                            <span style="font-size:1rem">${data.from}</span>
+                            <div class="call-actions">
+                                <button onclick="answerCall('${doc.id}', '${data.from}')" class="circle-btn btn-call">✔</button>
+                                <button onclick="rejectCall('${doc.id}')" class="circle-btn btn-reject">✖</button>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                    });
+                });
+        }
+
+        async function answerCall(id, from) {
+            currentCallId = id;
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                document.getElementById('localAudio').srcObject = localStream;
+                showScreen('callScreen');
+                document.getElementById('remoteName').innerText = from;
+                document.getElementById('callStatusText').innerText = "Im Gespräch";
+
+                peerConnection = new RTCPeerConnection(servers);
+                localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+
+                const callDoc = db.collection('calls').doc(id);
+                const callData = (await callDoc.get()).data();
+
+                peerConnection.onicecandidate = e => e.candidate && callDoc.collection('calleeCandidates').add(e.candidate.toJSON());
+                peerConnection.ontrack = e => document.getElementById('remoteAudio').srcObject = e.streams[0];
+
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(callData.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                await callDoc.update({ answer: { type: answer.type, sdp: answer.sdp }, status: 'connected' });
+
+                callDoc.collection('callerCandidates').onSnapshot(snap => {
+                    snap.docChanges().forEach(change => {
+                        if (change.type === 'added') peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+                    });
+                });
+
+                callDoc.onSnapshot(snap => { if(snap.data()?.status === 'ended') stopAll(); });
+
+            } catch(err) { alert(err.message); }
+        }
+
+        async function rejectCall(id) {
+            await db.collection('calls').doc(id).update({ status: 'ended' });
+        }
+
+        async function endCall() {
+            if(currentCallId) await db.collection('calls').doc(currentCallId).update({ status: 'ended' });
+            stopAll();
+        }
+
+        function stopAll() {
+            if(localStream) localStream.getTracks().forEach(t => t.stop());
+            if(peerConnection) peerConnection.close();
+            showScreen('mainScreen');
+            currentCallId = null;
+        }
+
+        function showScreen(id) {
+            ['loginScreen', 'mainScreen', 'callScreen'].forEach(s => document.getElementById(s).classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
